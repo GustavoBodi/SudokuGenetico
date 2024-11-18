@@ -1,99 +1,91 @@
-import random
+import numpy as np
+from geneticalgorithm import geneticalgorithm as ga
 
 
-class Sudoku():
+class OitoRainhas():
     def __init__(self, tamanho_populacao, taxa_mutacao, taxa_crossover, limite_geracao):
-        self.__tabuleiro = [[0 for i in range(9)] for j in range(9)]
+        self.__tabuleiro = np.zeros((8, 8), dtype=int)
         self.__tamanho_populacao = tamanho_populacao
         self.__taxa_mutacao = taxa_mutacao
         self.__taxa_crossover = taxa_crossover
         self.__limite_geracao = limite_geracao
         self.__populacao = []
         self.__melhor = []
-        self.__variaveis = self.__tabuleiro == 0
 
-    def __validate_placing(self, row: int, column: int, value: int):
-        return self.__validate_placing_row(row, column, value) and \
-                self.__validate_placing_column(row, column, value) and \
-                self.__validate_placing_small_matrix(row, column, value)
+    def __fitness_function(self, posicoes):
+        conflitos = 0
+        n = len(posicoes)
+        # Conflitos de coluna
+        conflitos += n - len(np.unique(posicoes))
+        # Conflitos diagonais
+        for i in range(n):
+            for j in range(i + 1, n):
+                if abs(posicoes[i] - posicoes[j]) == abs(i - j):
+                    conflitos += 1
+        return conflitos
 
-    def __get_small_matrix_cells(self, row: int, column: int):
-        row_inicio, col_inicio = 3 * (row // 3), 3 * (column // 3)
-        return (self.__tabuleiro[i][j] for i in range(row_inicio, row_inicio + 3) for j in range(col_inicio, col_inicio + 3))
+    def resolver(self):
+        varbound = np.array([[0, 7]] * 8)  # Limites para cada rainha (colunas 0 a 7)
+        algoritmo_param = {
+            'max_num_iteration': self.__limite_geracao,
+            'population_size': self.__tamanho_populacao,
+            'mutation_probability': self.__taxa_mutacao,
+            'elit_ratio': 0.02,
+            'crossover_probability': self.__taxa_crossover,
+            'parents_portion': 0.3,
+            'crossover_type': 'uniform',
+            'mutation_type': 'uniform_by_range',
+            'selection_type': 'roulette',
+            'max_iteration_without_improv': None
+        }
 
-    def __validate_placing_row(self, row: int, column: int, value: int) -> bool:
-        if value in self.__tabuleiro[row]:
-            return False
-        return True
+        modelo = ga(
+            function=self.__fitness_function,
+            dimension=8,
+            variable_type='int',
+            variable_boundaries=varbound,
+            algorithm_parameters=algoritmo_param
+        )
 
-    def __validate_placing_column(self, row: int, column: int, value: int) -> bool:
-        if value in [self.__tabuleiro[row][column] for i in range(9)]:
-            return False
-        return True
+        modelo.run()
 
-    def __validate_placing_small_matrix(self, row: int, column: int, value: int) -> bool:
-        return value not in self.__get_small_matrix_cells(row, column)
+        solucao = modelo.output_dict['variable'].astype(int)
+        fitness = modelo.output_dict['function']
 
-    def preencher(self, dicas: int = 0):
-        dicas_colocadas = 0
-        while dicas_colocadas < dicas:
-            row, col = random.randint(0, 8), random.randint(0, 8)
-            if self.__tabuleiro[row][col] == 0:
-                num = random.randint(1, 9)
-                if self.__validate_placing(row, col, num):
-                    self.__tabuleiro[row][col] = num
-                    dicas_colocadas += 1
+        self.__set_rainhas(solucao)
+
+        if fitness == 0:
+            print("Uma solucao valida foi encontrada!")
+            print(self)
+        else:
+            print("Nenhuma solucao valida encontrada dentro do limite de geracoes.")
+            print(f"Melhor fitness (numero de conflitos): {fitness}")
+            print(self)
+
+    def __set_rainhas(self, posicoes):
+        self.__tabuleiro = np.zeros((8, 8), dtype=int)
+        for linha, coluna in enumerate(posicoes):
+            self.__tabuleiro[linha, coluna] = 1
 
     def __str__(self):
-        tabuleiro = ""
-        for i, linha in enumerate(self.__tabuleiro):
-            linha_str = "| "
-            if i % 3 == 0:
-                tabuleiro += "-" * 37 + "\n"
-            for j, valor in enumerate(linha, 1):
-                if valor == 0:
-                    linha_str += "."
+        tabuleiro_str = "Tabuleiro:\n"
+        for linha in self.__tabuleiro:
+            linha_str = ''
+            for celula in linha:
+                if celula == 1:
+                    linha_str += ' Q '
                 else:
-                    linha_str += str(valor)
-                if j % 3 == 0:
-                    linha_str += " | "
-                else:
-                    linha_str += "   "
-            linha_str += "\n"
-            tabuleiro += linha_str
-        tabuleiro += "-" * 37 + "\n"
-        return tabuleiro
-
-
-def fitness_function(X):
-    board = X.reshape(9, 9).astype(int)
-    score = 0
-
-    # Calculate row uniqueness
-    for row in board:
-        score += len(set(row))  # More unique values = higher score
-
-    # Calculate column uniqueness
-    for col in board.T:
-        score += len(set(col))
-
-    # Calculate subgrid uniqueness
-    for row in range(0, 9, 3):
-        for col in range(0, 9, 3):
-            subgrid = board[row:row + 3, col:col + 3].flatten()
-            score += len(set(subgrid))
-
-    # Subtract penalties for duplicate values
-    max_score = 9 * 3 * 9  # Maximum possible score if everything is perfect
-    return max_score - score  # Minimize penalties
+                    linha_str += ' . '
+            tabuleiro_str += linha_str + '\n'
+        return tabuleiro_str
 
 
 def main():
-    print("This is the sudoku game.")
-    sudoku = Sudoku(300, 0.2, 0.9, 1000)
-    sudoku.preencher(10)
-    print(sudoku)
+    print("Resolucao do problema das 8 Rainhas usando algoritmo genetico.")
+    oito_rainhas = OitoRainhas(tamanho_populacao=200, taxa_mutacao=0.2, taxa_crossover=0.8, limite_geracao=50)
+    oito_rainhas.resolver()
 
 
 if __name__ == "__main__":
     main()
+
